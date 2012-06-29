@@ -26,7 +26,8 @@ NIB_SHORTHANDS = {
 JQM_EXTRACT_VARIABLES = {}
 
 for swatch in 'abcde':
-    JQM_EXTRACT_VARIABLES['.ui-bar-%s' % swatch] = {'background-image' : ((r'linear-gradient\(<COLOR>', '%s-bar-background-gradient-start' % swatch),)}
+    JQM_EXTRACT_VARIABLES['.ui-bar-%s' % swatch] = {'background-image' : ((r'linear-gradient\(<COLOR>', '%s-bar-background-gradient-start' % swatch),
+                                                                          (r'bar-background-start\}\*/, <COLOR> /', '%s-bar-background-gradient-end' % swatch))}
 
 def main(filename):
     with open(filename, 'rb') as f:
@@ -36,6 +37,7 @@ def main(filename):
 
     # Variable name => (value, number of occurrences of that value)
     extractedVariables = {}
+    variablesToExtract = JQM_EXTRACT_VARIABLES
 
     for rule in css:
         if rule.type == rule.COMMENT:
@@ -84,7 +86,7 @@ def main(filename):
                 writeLineBuffered()
 
             if rule['type'] == 'style':
-                writeStyleRule(rule, writeLineBuffered, extractedVariables)
+                writeStyleRule(rule, writeLineBuffered, extractedVariables, variablesToExtract)
             elif rule['type'] == 'comment':
                 writeCommentRule(rule, writeLineBuffered)
             else:
@@ -94,7 +96,7 @@ def main(filename):
         extractedVariablesList = list(extractedVariables.items())
         extractedVariablesList.sort()
         for variableName, (variableValue, numOccurrences) in extractedVariablesList:
-            print('Variable $%s: %-10s (x%d)' % (variableName, variableValue, numOccurrences))
+            print('Variable $%-32s = %-10s (x%d)' % (variableName, variableValue, numOccurrences))
             writeLine('$%s = %s' % (variableName, variableValue))
 
         if extractedVariablesList:
@@ -103,17 +105,26 @@ def main(filename):
         buffer.seek(0)
         writeLine(buffer.read())
 
+    extractedVariableNames = set(extractedVariables.keys())
+
+    for mapping in variablesToExtract.values():
+        for extractionInfos in mapping.values():
+            for unusedSearchRegex, variableName in extractionInfos:
+                if variableName not in extractedVariableNames:
+                    print('Warning: Variable %s not extracted, check if the regex matches anything' % variableName,
+                          file=sys.stderr)
+
 def writeCommentRule(rule, writeLine):
     writeLine(rule['text'])
 
-def writeStyleRule(rule, writeLine, extractedVariables):
+def writeStyleRule(rule, writeLine, extractedVariables, variablesToExtract):
     extractVariablesMapping = {}
 
     for selector in rule['selectorList']:
         writeLine(selector)
 
-        if selector in JQM_EXTRACT_VARIABLES:
-            extractVariablesMapping.update(JQM_EXTRACT_VARIABLES[selector])
+        if selector in variablesToExtract:
+            extractVariablesMapping.update(variablesToExtract[selector])
 
     # Stores the Stylus function names that were already written out for this rule
     hadShorthand = set()
