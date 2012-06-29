@@ -23,11 +23,12 @@ NIB_SHORTHANDS = {
     '-moz-border-radius-topleft' : 'border-top-left-radius',
 }
 
-JQM_EXTRACT_VARIABLES = {}
+JQM_EXTRACT_VARIABLES = {r'.ui-body-a .ui-link(:.*)?' : {r'color' : []}}
 
 for swatch in 'abcde':
-    JQM_EXTRACT_VARIABLES['.ui-bar-%s' % swatch] = {'background-image' : ((r'linear-gradient\(<COLOR>', '%s-bar-background-gradient-start' % swatch),
-                                                                          (r'bar-background-start\}\*/, <COLOR> /', '%s-bar-background-gradient-end' % swatch))}
+    JQM_EXTRACT_VARIABLES[r'.ui-bar-%s' % swatch] = {r'background-image' : ((r'linear-gradient\(<COLOR>', '%s-bar-background-gradient-start' % swatch),
+                                                                            (r'bar-background-start\}\*/, <COLOR> /', '%s-bar-background-gradient-end' % swatch))}
+    JQM_EXTRACT_VARIABLES[r'.ui-body-a .ui-link(:.*)?'][r'color'].append((r'<COLOR>', '%s-body-link-color' % swatch))
 
 def main(filename):
     with open(filename, 'rb') as f:
@@ -125,6 +126,17 @@ def writeStyleRule(rule, writeLine, extractedVariables, variablesToExtract):
 
         if selector in variablesToExtract:
             extractVariablesMapping.update(variablesToExtract[selector])
+        else:
+            for selectorMatchRegex in variablesToExtract:
+                originalSelectorMatchRegex = selectorMatchRegex
+
+                # Force full matching
+                if not selectorMatchRegex.endswith('$'):
+                    selectorMatchRegex += '$'
+
+                if re.match(selectorMatchRegex, selector):
+                    extractVariablesMapping.update(variablesToExtract[originalSelectorMatchRegex])
+                    break
 
     # Stores the Stylus function names that were already written out for this rule
     hadShorthand = set()
