@@ -110,15 +110,16 @@ class Css2Stylus(object):
             else:
                 officialName = None
 
-            if ((name.startswith('-moz-') or name.startswith('-webkit-')) and
-                officialName is not None and (officialName in NIB_SHORTHANDS or name in NIB_SHORTHANDS)):
+            if (((name.startswith('-moz-') or name.startswith('-webkit-')) and
+                 officialName is not None and (officialName in NIB_SHORTHANDS or name in NIB_SHORTHANDS)) or
+                name in NIB_SHORTHANDS):
                 stylusFunction = NIB_SHORTHANDS[officialName] if officialName in NIB_SHORTHANDS else NIB_SHORTHANDS[name]
 
-                if not stylusFunction in hadShorthand:
+                if stylusFunction not in hadShorthand:
                     node['_properties'].append('%s(%s%s%s)' % (stylusFunction,
-                                                                                                  value,
-                                                                                                  ' ' if priority else '',
-                                                                                                  priority))
+                                                               value,
+                                                               ' ' if priority else '',
+                                                               priority))
                     #write_line('  %s(%s%s%s)' % (stylusFunction,
                     #                            value,
                     #                            ' ' if priority else '',
@@ -126,16 +127,9 @@ class Css2Stylus(object):
 
                     # TODO: hadShorthand doesn't work anymore in tree mode, should be stored inside the tree
                     hadShorthand.add(stylusFunction)
-            elif name not in NIB_SHORTHANDS or NIB_SHORTHANDS[name] not in hadShorthand:
-                nameToWrite = name if name not in NIB_SHORTHANDS else NIB_SHORTHANDS[name]
-
-                #propertyFormatted = '  %s: %s%s%s' % (nameToWrite,
-                #                                      value,
-                #                                      ' ' if priority else '',
-                #                                      priority)
-                #write_line(propertyFormatted)
-
-                propertyFormatted = '%s: %s%s%s' % (nameToWrite,
+            else:
+                assert(name not in NIB_SHORTHANDS)
+                propertyFormatted = '%s: %s%s%s' % (name,
                                                     value,
                                                     ' ' if priority else '',
                                                     priority)
