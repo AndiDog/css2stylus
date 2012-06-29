@@ -161,9 +161,9 @@ def writeStyleRule(rule, writeLine, extractedVariables, variablesToExtract):
                                             % (variableName, expectedVariableValue, variableValue))
 
                         # Increment number of occurrences
-                        extractedVariables[variableName] += 1
+                        extractedVariables[variableName][1] += 1
                     else:
-                        extractedVariables[variableName] = (variableValue, 1)
+                        extractedVariables[variableName] = [variableValue, 1]
 
         if name.startswith('-') and name.count('-') >= 2:
             officialName = name[2 + name[1:].index('-'):]
