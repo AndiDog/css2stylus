@@ -1,0 +1,18 @@
+body {
+  color: red;
+  font-size: 14pt
+}
+
+body p {
+  color: white
+}
+
+p {
+  color: green
+}
+
+body p div {
+  border-radius: 5em;
+  -moz-border-radius: 5em;
+  -webkit-border-radius: 5em
+}
