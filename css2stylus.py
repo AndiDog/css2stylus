@@ -233,7 +233,7 @@ class Css2Stylus(object):
             for extractionInfos in mapping.values():
                 for unusedSearchRegex, variableName in extractionInfos:
                     if variableName not in extractedVariableNames:
-                        print('Warning: Variable %s not extracted, check if the regex matches anything' % variableName,
+                        print('Warning: Variable %s not extracted, check regex' % variableName,
                               file=sys.stderr)
 
     @staticmethod
