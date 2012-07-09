@@ -44,8 +44,6 @@ class Css2Stylus(object):
             self._tree[tuple(rule['selector_list'])] = node
 
         for selector in rule['selector_list']:
-            #write_line(selector)
-
             if selector in variables_to_extract:
                 extract_variables_mapping.update(variables_to_extract[selector])
             else:
@@ -257,12 +255,12 @@ class Css2Stylus(object):
 
                 self._write_tree(write_line)
 
-        extractedVariableNames = set(extracted_variables.keys())
+        extracted_variable_names = set(extracted_variables.keys())
 
         for mapping in variables_to_extract.values():
-            for extractionInfos in mapping.values():
-                for unusedSearchRegex, variable_name in extractionInfos:
-                    if variable_name not in extractedVariableNames:
+            for extraction_infos in mapping.values():
+                for unused_search_regex, variable_name in extraction_infos:
+                    if variable_name not in extracted_variable_names:
                         print('WARNING: Variable %s not extracted, check regex' % variable_name,
                               file=sys.stderr)
 
