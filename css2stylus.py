@@ -46,38 +46,38 @@ for swatch in 'abcde':
                                                                                                    (r'-start\}\*/,\s*<COLOR>', '%s-btn-%s-gradient-end' % (swatch, button_state))]}
 
 class Css2Stylus(object):
-    def _addStyleRule(self, rule, extractedVariables, variablesToExtract):
-        extractVariablesMapping = {}
+    def _addStyleRule(self, rule, extracted_variables, variables_to_extract):
+        extract_variables_mapping = {}
 
         # If there's exactly one selector, it can be merged with other rules
-        if self._use_indented_style and len(rule['selectorList']) == 1:
-            selector = rule['selectorList'][0]
+        if self._use_indented_style and len(rule['selector_list']) == 1:
+            selector = rule['selector_list'][0]
 
             node = self._find_or_create_nested_node(selector)
         else:
             node = {'_properties': [], '_order_index' : self._order_index}
             self._order_index += 1
-            self._tree[tuple(rule['selectorList'])] = node
+            self._tree[tuple(rule['selector_list'])] = node
 
-        for selector in rule['selectorList']:
+        for selector in rule['selector_list']:
             #write_line(selector)
 
-            if selector in variablesToExtract:
-                extractVariablesMapping.update(variablesToExtract[selector])
+            if selector in variables_to_extract:
+                extract_variables_mapping.update(variables_to_extract[selector])
             else:
-                for selectorMatchRegex in variablesToExtract:
-                    originalSelectorMatchRegex = selectorMatchRegex
+                for selector_match_regex in variables_to_extract:
+                    original_selector_match_regex = selector_match_regex
 
                     # Force full matching
-                    if not selectorMatchRegex.endswith('$'):
-                        selectorMatchRegex += '$'
+                    if not selector_match_regex.endswith('$'):
+                        selector_match_regex += '$'
 
-                    if re.match(selectorMatchRegex, selector):
-                        extractVariablesMapping.update(variablesToExtract[originalSelectorMatchRegex])
+                    if re.match(selector_match_regex, selector):
+                        extract_variables_mapping.update(variables_to_extract[original_selector_match_regex])
                         break
 
         # Stores the Stylus function names that were already written out for this rule
-        hadShorthand = set()
+        had_shorthand = set()
 
         for property in rule['properties']:
             name, value, priority = property
@@ -86,56 +86,56 @@ class Css2Stylus(object):
             # searching so that variable names are not matched accidentally.
             value_variable_ranges = []
 
-            if name in extractVariablesMapping:
-                for searchRegex, variableName in extractVariablesMapping[name]:
+            if name in extract_variables_mapping:
+                for search_regex, variable_name in extract_variables_mapping[name]:
                     # Match colors #fff, #123456, red, white, etc.
-                    searchRegex = (searchRegex.replace('<COLOR>', r'(?P<color>#[a-fA-F0-9]{3,6}|[a-z]{3,20})')
-                                              .replace('<VALUE>', r'\s*(?P<value>.*)\s*'))
+                    search_regex = (search_regex.replace('<COLOR>', r'(?P<color>#[a-fA-F0-9]{3,6}|[a-z]{3,20})')
+                                                .replace('<VALUE>', r'\s*(?P<value>.*)\s*'))
 
                     # Replace any inserted variables by underscores so that they won't get matched
-                    match = re.search(searchRegex, self.replace_variable_ranges(value, value_variable_ranges))
+                    match = re.search(search_regex, self.replace_variable_ranges(value, value_variable_ranges))
 
                     if match:
-                        variableValue = None
+                        variable_value = None
 
-                        for groupName in ('color', 'value'):
-                            if match.groupdict().get(groupName, None):
-                                if variableValue is not None:
+                        for group_name in ('color', 'value'):
+                            if match.groupdict().get(group_name, None):
+                                if variable_value is not None:
                                     raise AssertionError('Two groups in the regex matched!')
 
-                                variableValue = match.group(groupName)
-                                start, end = match.span(groupName)
+                                variable_value = match.group(group_name)
+                                start, end = match.span(group_name)
 
                                 for vstart, vend in value_variable_ranges:
                                     if self.overlaps((start, end), (vstart, vend)):
                                         raise AssertionError('Regex search overlaps with inserted variable')
 
                                 # Inject variable name instead of the value
-                                value = value[:start] + '$' + variableName + value[end:]
+                                value = value[:start] + '$' + variable_name + value[end:]
 
                                 for vrange in value_variable_ranges:
                                     if vrange[0] >= start:
-                                        diff = (end-start) + len('$' + variableName)
+                                        diff = (end-start) + len('$' + variable_name)
                                         vrange[0] += diff
                                         vrange[1] += diff
 
-                                value_variable_ranges.append([start, start + len('$' + variableName)])
+                                value_variable_ranges.append([start, start + len('$' + variable_name)])
 
-                        if variableValue is None:
-                            raise AssertionError('Variable value of %s not found' % variableName)
+                        if variable_value is None:
+                            raise AssertionError('Variable value of %s not found' % variable_name)
 
-                        if variableName in extractedVariables:
-                            expectedVariableValue = extractedVariables[variableName][0]
+                        if variable_name in extracted_variables:
+                            expected_variable_value = extracted_variables[variable_name][0]
 
-                            if expectedVariableValue != variableValue:
+                            if expected_variable_value != variable_value:
                                 raise Exception("Variable %s has ambiguous values '%s' and '%s', maybe you need to be more "
                                                 "specific in your variable definiton or create two variables"
-                                                % (variableName, expectedVariableValue, variableValue))
+                                                % (variable_name, expected_variable_value, variable_value))
 
                             # Increment number of occurrences
-                            extractedVariables[variableName][1] += 1
+                            extracted_variables[variable_name][1] += 1
                         else:
-                            extractedVariables[variableName] = [variableValue, 1]
+                            extracted_variables[variable_name] = [variable_value, 1]
 
             if name.startswith('-') and name.count('-') >= 2:
                 officialName = name[2 + name[1:].index('-'):]
@@ -145,27 +145,27 @@ class Css2Stylus(object):
             if (((name.startswith('-moz-') or name.startswith('-webkit-')) and
                  officialName is not None and (officialName in NIB_SHORTHANDS or name in NIB_SHORTHANDS)) or
                 name in NIB_SHORTHANDS):
-                stylusFunction = NIB_SHORTHANDS[officialName] if officialName in NIB_SHORTHANDS else NIB_SHORTHANDS[name]
+                stylus_function = NIB_SHORTHANDS[officialName] if officialName in NIB_SHORTHANDS else NIB_SHORTHANDS[name]
 
-                if stylusFunction not in hadShorthand:
-                    node['_properties'].append('%s(%s%s%s)' % (stylusFunction,
+                if stylus_function not in had_shorthand:
+                    node['_properties'].append('%s(%s%s%s)' % (stylus_function,
                                                                value,
                                                                ' ' if priority else '',
                                                                priority))
-                    #write_line('  %s(%s%s%s)' % (stylusFunction,
+                    #write_line('  %s(%s%s%s)' % (stylus_function,
                     #                            value,
                     #                            ' ' if priority else '',
                     #                            priority))
 
-                    # TODO: hadShorthand doesn't work anymore in tree mode, should be stored inside the tree
-                    hadShorthand.add(stylusFunction)
+                    # TODO: had_shorthand doesn't work anymore in tree mode, should be stored inside the tree
+                    had_shorthand.add(stylus_function)
             else:
                 assert(name not in NIB_SHORTHANDS)
-                propertyFormatted = '%s: %s%s%s' % (name,
+                property_formatted = '%s: %s%s%s' % (name,
                                                     value,
                                                     ' ' if priority else '',
                                                     priority)
-                node['_properties'].append(propertyFormatted)
+                node['_properties'].append(property_formatted)
 
     def convert(self, filename, use_indented_style=False):
         """
@@ -193,19 +193,19 @@ class Css2Stylus(object):
         out = []
 
         # Variable name => (value, number of occurrences of that value)
-        extractedVariables = {}
-        variablesToExtract = JQM_EXTRACT_VARIABLES
+        extracted_variables = {}
+        variables_to_extract = JQM_EXTRACT_VARIABLES
 
         for rule in css:
             if rule.type == rule.COMMENT:
                 out.append({'type' : 'comment',
                             'text' : rule.cssText})
             elif rule.type == rule.STYLE_RULE:
-                selectorList = tuple(selector.selectorText for selector in rule.selectorList)
+                selector_list = tuple(selector.selectorText for selector in rule.selector_list)
 
                 properties = []
                 out.append({'type' : 'style',
-                            'selectorList' : selectorList,
+                            'selector_list' : selector_list,
                             'properties' : properties})
 
                 for property in rule.style:
@@ -234,7 +234,7 @@ class Css2Stylus(object):
 
             for rule in out:
                 if rule['type'] == 'style':
-                    self._addStyleRule(rule, extractedVariables, variablesToExtract)
+                    self._addStyleRule(rule, extracted_variables, variables_to_extract)
                 elif rule['type'] == 'comment':
                     # TODO: does not work anymore with tree structure, rewrite to insert comments in correct order
                     self._writeCommentRule(rule, write_line)
@@ -242,24 +242,24 @@ class Css2Stylus(object):
                     raise AssertionError
 
             # Write out variables in alphabetical order
-            extractedVariablesList = list(extractedVariables.items())
-            extractedVariablesList.sort()
-            for variableName, (variableValue, numOccurrences) in extractedVariablesList:
-                print('Variable $%-32s = %-10s (x%d)' % (variableName, variableValue, numOccurrences))
-                write_line('$%s = %s' % (variableName, variableValue))
+            extracted_variablesList = list(extracted_variables.items())
+            extracted_variablesList.sort()
+            for variable_name, (variable_value, numOccurrences) in extracted_variablesList:
+                print('Variable $%-32s = %-10s (x%d)' % (variable_name, variable_value, numOccurrences))
+                write_line('$%s = %s' % (variable_name, variable_value))
 
-            if extractedVariablesList:
+            if extracted_variablesList:
                 write_line()
 
             self._write_tree(write_line)
 
-        extractedVariableNames = set(extractedVariables.keys())
+        extractedVariableNames = set(extracted_variables.keys())
 
-        for mapping in variablesToExtract.values():
+        for mapping in variables_to_extract.values():
             for extractionInfos in mapping.values():
-                for unusedSearchRegex, variableName in extractionInfos:
-                    if variableName not in extractedVariableNames:
-                        print('Warning: Variable %s not extracted, check regex' % variableName,
+                for unusedSearchRegex, variable_name in extractionInfos:
+                    if variable_name not in extractedVariableNames:
+                        print('Warning: Variable %s not extracted, check regex' % variable_name,
                               file=sys.stderr)
 
     @staticmethod
@@ -267,34 +267,34 @@ class Css2Stylus(object):
         if ',' in a or ',' in b:
             raise AssertionError
 
-        aSplit = list(filter(bool, a.split(' ')))
-        bSplit = list(filter(bool, b.split(' ')))
+        a_split = list(filter(bool, a.split(' ')))
+        b_split = list(filter(bool, b.split(' ')))
 
-        if any((op in aSplit or op in bSplit) for op in OPERATORS):
+        if any((op in a_split or op in b_split) for op in OPERATORS):
             # Merging rules with operators such as '>' not supported. Can they be written indented in Stylus? If so, then
             # 1) that's awesome and 2) one could just merge each operator with the next list item here.
             return None
 
-        if aSplit == bSplit:
+        if a_split == b_split:
             raise AssertionError
 
-        lastEqualIndex = -1
-        for i in range(max(len(aSplit), len(bSplit))):
-            if aSplit[i] != bSplit[i]:
+        last_equal_index = -1
+        for i in range(max(len(a_split), len(b_split))):
+            if a_split[i] != b_split[i]:
                 break
 
-            lastEqualIndex = i
+            last_equal_index = i
 
-        if lastEqualIndex == -1:
+        if last_equal_index == -1:
             # No common parent
             return None
 
         # Some in-code unit testing :D
-        assert(aSplit[:lastEqualIndex + 1] == bSplit[:lastEqualIndex + 1])
+        assert(a_split[:last_equal_index + 1] == b_split[:last_equal_index + 1])
 
-        return ' '.join(aSplit[:lastEqualIndex + 1])
+        return ' '.join(a_split[:last_equal_index + 1])
 
-    def _find_existing_parent(selector, _tree=None, _depth=0, _existingMatches=None):
+    def _find_existing_parent(selector, _tree=None, _depth=0, _existing_matches=None):
         raise AssertionError("abandoned")
         """
         Recursively find node with a single selector that shares the same parent with the given selector. For example,
@@ -323,37 +323,37 @@ class Css2Stylus(object):
 
         # Start recursion with the top :)
         if _tree is None:
-            outerRecursion = True
+            outer_recursion = True
             _tree = self._tree
 
             # Tuples (depth, found dictionary)
-            _existingMatches = []
+            _existing_matches = []
         else:
-            outerRecursion
+            outer_recursion
 
-        for selectorList in _tree:
-            if len(selectorList) == 1 and self.find_common_selector_parent(selector, selectorList[0]):
-                _existingMatches.append((_depth))
+        for selector_list in _tree:
+            if len(selector_list) == 1 and self.find_common_selector_parent(selector, selector_list[0]):
+                _existing_matches.append((_depth))
 
-        if outerRecursion:
+        if outer_recursion:
             # Sort by depth
-            _existingMatches.sort()
-            if _existingMatches:
-                return _existingMatches[0]
+            _existing_matches.sort()
+            if _existing_matches:
+                return _existing_matches[0]
 
             return None
 
     def _find_or_create_nested_node(self, selector):
-        selectorSplit = self._split_selector(selector)
+        selector_split = self._split_selector(selector)
 
         node = self._tree
 
-        for selectorPart in selectorSplit:
-            if (selectorPart,) not in node:
-                node[(selectorPart,)] = {'_properties' : [], '_order_index' : self._order_index}
+        for selector_part in selector_split:
+            if (selector_part,) not in node:
+                node[(selector_part,)] = {'_properties' : [], '_order_index' : self._order_index}
                 self._order_index += 1
 
-            node = node[(selectorPart,)]
+            node = node[(selector_part,)]
 
         return node
 
@@ -415,9 +415,8 @@ class Css2Stylus(object):
         # Sort, and ignore any additional attributes such as k=_order_index v=0
         l.sort(key=lambda (k, v): v['_order_index'] if k not in TREE_ATTRIBUTE_NAMES else -1)
 
-
-        for selectorList, sub_tree in l:
-            if selectorList in TREE_ATTRIBUTE_NAMES:
+        for selector_list, sub_tree in l:
+            if selector_list in TREE_ATTRIBUTE_NAMES:
                 # This should not happen at top level
                 assert(_tree is not self._tree)
 
@@ -426,11 +425,11 @@ class Css2Stylus(object):
 
             write_line()
 
-            for selector in selectorList:
+            for selector in selector_list:
                 write_line(selector)
 
-            for propertyLine in sub_tree['_properties']:
-                write_line('  ' + propertyLine)
+            for property_line in sub_tree['_properties']:
+                write_line('  ' + property_line)
 
             self._write_tree(lambda s='': write_line('  ' + s), _tree=sub_tree)
 
