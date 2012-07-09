@@ -28,12 +28,12 @@ OPERATORS = ('>', '*', '+')
 
 TREE_ATTRIBUTE_NAMES = ('_properties', '_order_index')
 
-JQM_EXTRACT_VARIABLES = {r'.ui-body-a .ui-link(:.*)?' : {r'color' : []}}
+JQM_EXTRACT_VARIABLES = {}
 
 for swatch in 'abcde':
     JQM_EXTRACT_VARIABLES[r'.ui-bar-%s' % swatch] = {r'background-image' : ((r'linear-gradient\(<COLOR>', '%s-bar-background-gradient-start' % swatch),
                                                                             (r'bar-background-start\}\*/, <COLOR> /', '%s-bar-background-gradient-end' % swatch))}
-    JQM_EXTRACT_VARIABLES[r'.ui-body-a .ui-link(:.*)?'][r'color'].append((r'<COLOR>', '%s-body-link-color' % swatch))
+    JQM_EXTRACT_VARIABLES[r'.ui-body-%s .ui-link(:.*)?' % swatch] = {r'color' : [(r'<COLOR>', '%s-body-link-color' % swatch)]}
 
 class Css2Stylus(object):
     def _addStyleRule(self, rule, extractedVariables, variablesToExtract):
@@ -72,12 +72,17 @@ class Css2Stylus(object):
         for property in rule['properties']:
             name, value, priority = property
 
+            # Store parts of 'value' where we inserted variable names already. These parts are excluded from regex
+            # searching so that variable names are not matched accidentally.
+            value_variable_ranges = []
+
             if name in extractVariablesMapping:
                 for searchRegex, variableName in extractVariablesMapping[name]:
                     # Match colors #fff, #123456, red, white, etc.
                     searchRegex = searchRegex.replace('<COLOR>', r'(?P<color>#[a-fA-F0-9]{3,6}|[a-z]{3,20})')
 
-                    match = re.search(searchRegex, value)
+                    # Replace any inserted variables by underscores so that they won't get matched
+                    match = re.search(searchRegex, self.replace_variable_ranges(value, value_variable_ranges))
 
                     if match:
                         variableValue = None
@@ -87,10 +92,23 @@ class Css2Stylus(object):
                                 if variableValue is not None:
                                     raise AssertionError('Two groups in the regex matched!')
 
-                                # Inject variable name instead of the value
                                 variableValue = match.group(groupName)
                                 start, end = match.span(groupName)
+
+                                for vstart, vend in value_variable_ranges:
+                                    if self.overlaps((start, end), (vstart, vend)):
+                                        raise AssertionError('Regex search overlaps with inserted variable')
+
+                                # Inject variable name instead of the value
                                 value = value[:start] + '$' + variableName + value[end:]
+
+                                for vrange in value_variable_ranges:
+                                    if vrange[0] >= start:
+                                        diff = (end-start) + len('$' + variableName)
+                                        vrange[0] += diff
+                                        vrange[1] += diff
+
+                                value_variable_ranges.append([start, start + len('$' + variableName)])
 
                         if variableName in extractedVariables:
                             expectedVariableValue = extractedVariables[variableName][0]
@@ -325,6 +343,39 @@ class Css2Stylus(object):
 
         return node
 
+    @staticmethod
+    def overlaps(range1, range2):
+        s1, e1 = range1
+        s2, e2 = range2
+
+        if (e1 - s1) == 0 or (e2 - s2) == 0:
+            raise AssertionError
+
+        if e1 == s2 or e2 == s1:
+            return False
+
+        if s1 >= s2:
+            if e1 <= e2:
+                return True
+            else:
+                return e2 > s1
+        elif s2 >= s1:
+            if e1 <= e2:
+                return e1 > s2
+            else:
+                return True
+
+        return False
+
+    @staticmethod
+    def replace_variable_ranges(value, value_variable_ranges):
+        ret = value
+
+        for start, end in value_variable_ranges:
+            ret = ret[:start] + (end - start) * '_' + ret[end:]
+
+        return ret
+
     def _reset(self):
         # Nested dictionary where the key '_properties' represents lists of property strings (full lines). Note that keys in the
         # dictionaries are tuples of selectors. Nesting is only possible if that tuple contains exactly one selector.
@@ -369,7 +420,6 @@ class Css2Stylus(object):
 
             self._write_tree(lambda s='': write_line('  ' + s), _tree=sub_tree)
 
-
 class UnitTest(unittest.TestCase):
     def test_find_common_selector_parent(self):
         f = Css2Stylus.find_common_selector_parent
@@ -389,7 +439,30 @@ class UnitTest(unittest.TestCase):
         # Operators - should be supported at some point
         self.assertIsNone(f('body p', 'body > p'))
 
+    def test_overlaps(self):
+        o = lambda s1, e1, s2, e2: Css2Stylus.overlaps((s1, e1), (s2, e2))
+
+        self.assertRaises(AssertionError, lambda: o(1, 1, 1, 2))
+
+        self.assertTrue(o(1, 2, 1, 2))
+
+        self.assertTrue(o(1, 2, 1, 3))
+
+        self.assertTrue(o(2, 3, 1, 4))
+        self.assertTrue(o(1, 4, 2, 3))
+
+        self.assertTrue(o(1, 3, 2, 3))
+
+        self.assertTrue(o(1, 3, 2, 4))
+        self.assertTrue(o(2, 4, 1, 3))
+
+        self.assertFalse(o(1, 2, 2, 3))
+        self.assertFalse(o(2, 3, 1, 2))
+
+        self.assertFalse(o(1, 2, 3, 4))
+        self.assertFalse(o(3, 4, 1, 2))
+
 if __name__ == '__main__':
     #unittest.main()
-    #Css2Stylus().convert('jquery.mobile.theme-1.1.0.css', use_indented_style=True)
-    Css2Stylus().convert('test.css', use_indented_style=True)
+    Css2Stylus().convert('jquery.mobile.theme-1.1.0.css', use_indented_style=True)
+    #Css2Stylus().convert('test.css', use_indented_style=True)
