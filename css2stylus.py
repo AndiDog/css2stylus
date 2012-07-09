@@ -6,6 +6,7 @@ Dependencies:
 
 from __future__ import print_function
 import cssutils
+import os
 import re
 from StringIO import StringIO
 import sys
@@ -27,23 +28,6 @@ NIB_SHORTHANDS = {
 OPERATORS = ('>', '*', '+')
 
 TREE_ATTRIBUTE_NAMES = ('_properties', '_order_index')
-
-JQM_EXTRACT_VARIABLES = {}
-
-for swatch in 'abcde':
-    JQM_EXTRACT_VARIABLES[r'.ui-bar-%s' % swatch] = {r'background-image' : ((r'linear-gradient\(<COLOR>', '%s-bar-background-gradient-start' % swatch),
-                                                                            (r'bar-background-start\}\*/, <COLOR> /', '%s-bar-background-gradient-end' % swatch)),
-                                                     r'text-shadow' : [(r'<VALUE>', '%s-bar-text-shadow' % swatch)]}
-    JQM_EXTRACT_VARIABLES[r'.ui-body-%s .ui-link(:.*)?' % swatch] = {r'color' : [(r'<COLOR>', '%s-body-link-color' % swatch)]}
-    JQM_EXTRACT_VARIABLES[r'.ui-bar-%s .ui-link' % swatch] = {r'color' : [(r'<COLOR>', '%s-bar-link-color' % swatch)]}
-    JQM_EXTRACT_VARIABLES[r'.ui-bar-%s .ui-link:.*' % swatch] = {r'color' : [(r'<COLOR>', '%s-bar-link-color-hoveractivevisited' % swatch)]}
-    JQM_EXTRACT_VARIABLES[r'.ui-body-%s' % swatch] = {r'border' : [(r'solid\s+<COLOR>', '%s-body-border' % swatch)],
-                                                      r'background-image' : [(r'linear-gradient\(\s*<COLOR>', '%s-body-background-gradient-start' % swatch),
-                                                                             (r'-start\}\*/,\s*<COLOR>', '%s-body-background-gradient-end' % swatch)]}
-    for button_state in ('up', 'down', 'hover'):
-        JQM_EXTRACT_VARIABLES[r'.ui-btn-%s-%s' % (button_state, swatch)] = {r'border' : [(r'solid\s+<COLOR>', '%s-btn-%s-border' % (swatch, button_state))],
-                                                                            r'background-image' : [(r'linear-gradient\(\s*<COLOR>', '%s-btn-%s-gradient-start' % (swatch, button_state)),
-                                                                                                   (r'-start\}\*/,\s*<COLOR>', '%s-btn-%s-gradient-end' % (swatch, button_state))]}
 
 class Css2Stylus(object):
     def _addStyleRule(self, rule, extracted_variables, variables_to_extract):
@@ -167,7 +151,7 @@ class Css2Stylus(object):
                                                     priority)
                 node['_properties'].append(property_formatted)
 
-    def convert(self, filename, out_filename, vars_out_filename, use_indented_style=False):
+    def convert(self, filename, out_filename, vars_out_filename, vars_module, use_indented_style):
         """
         @param use_indented_style:
             Put rules like 'body p { color: red }' as follows:
@@ -194,7 +178,20 @@ class Css2Stylus(object):
 
         # Variable name => (value, number of occurrences of that value)
         extracted_variables = {}
-        variables_to_extract = JQM_EXTRACT_VARIABLES
+
+        if vars_module:
+            script_dir = os.path.abspath(os.path.dirname(__file__))
+            cwd = os.getcwd()
+            sys.path.insert(0, cwd)
+            sys.path.insert(1, script_dir)
+            try:
+                module = __import__(vars_module)
+                variables_to_extract = module.EXTRACT_VARIABLES
+            finally:
+                sys.path = sys.path[2:]
+        else:
+            print('WARNING: Not extracting variables, use the --vars-module parameter to do so', file=sys.stderr)
+            variables_to_extract = {}
 
         for rule in css:
             if rule.type == rule.COMMENT:
@@ -266,7 +263,7 @@ class Css2Stylus(object):
             for extractionInfos in mapping.values():
                 for unusedSearchRegex, variable_name in extractionInfos:
                     if variable_name not in extractedVariableNames:
-                        print('Warning: Variable %s not extracted, check regex' % variable_name,
+                        print('WARNING: Variable %s not extracted, check regex' % variable_name,
                               file=sys.stderr)
 
     @staticmethod
@@ -515,6 +512,14 @@ def main():
                         metavar='FILENAME')
     parser.add_argument('--output', help='Stylus output file (convert and merge mode)', metavar='FILENAME')
     parser.add_argument('--vars-output', help='Variables output file (convert mode only)', metavar='FILENAME')
+    parser.add_argument('--vars-module',
+                        help='Python module with a dictionary called EXTRACT_VARIABLES defining which variables to '
+                        'extract(convert mode only, defaults to none)',
+                        metavar='MODULE NAME')
+    parser.add_argument('--no-indented-style',
+                        action="store_false",
+                        default=True,
+                        help='Output Stylus in linear style, not indented (convert mode only)')
 
     args = parser.parse_args()
 
@@ -528,11 +533,13 @@ def main():
         args.input = 'jquery.mobile.theme-1.1.0.css'
         args.output = 'jquery.mobile.theme-1.1.0.css.autogen.rules.styl'
         args.vars_output = 'jquery.mobile.theme-1.1.0.css.autogen.vars.styl'
+        args.vars_module = 'jqm_variables'
         args.mode = 'convert'
     elif args.mode == 'testsimple':
         args.input = 'test.css'
         args.output = 'test.css.autogen.rules.styl'
         args.vars_output = 'test.css.autogen.vars.styl'
+        args.vars_module = 'jqm_variables'
         args.mode = 'convert'
 
     if args.mode == 'unittest':
@@ -546,7 +553,8 @@ def main():
         Css2Stylus().convert(filename=args.input,
                              out_filename=args.output,
                              vars_out_filename=args.vars_output,
-                             use_indented_style=True)
+                             vars_module=args.vars_module,
+                             use_indented_style=not args.no_indented_style)
     elif args.mode == 'merge':
         if not args.input:
             arg_error('Missing input filename')
