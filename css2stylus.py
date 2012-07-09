@@ -149,7 +149,7 @@ class Css2Stylus(object):
                                                     priority)
                 node['_properties'].append(property_formatted)
 
-    def convert(self, filename, out_filename, vars_out_filename, vars_module, use_indented_style):
+    def convert(self, filename, out_filename, vars_out_filename, vars_modules, use_indented_style):
         """
         @param use_indented_style:
             Put rules like 'body p { color: red }' as follows:
@@ -176,20 +176,38 @@ class Css2Stylus(object):
 
         # Variable name => (value, number of occurrences of that value)
         extracted_variables = {}
+        variables_to_extract = {}
 
-        if vars_module:
+        if vars_modules:
+            if len(set(vars_modules)) != len(vars_modules):
+                raise AssertionError('Duplicate variables module')
+
             script_dir = os.path.abspath(os.path.dirname(__file__))
             cwd = os.getcwd()
             sys.path.insert(0, cwd)
             sys.path.insert(1, script_dir)
             try:
-                module = __import__(vars_module)
-                variables_to_extract = module.EXTRACT_VARIABLES
+                for vars_module in vars_modules:
+                    module = __import__(vars_module)
+
+                    # Merge dictionary (cannot use dict.update because that does a simple key replacement, we have a
+                    # nested dictionary)
+                    for selector_match_regex, mapping in module.EXTRACT_VARIABLES.items():
+                        if selector_match_regex in variables_to_extract:
+                            for property_name, extraction_infos in mapping.items():
+                                if property_name in variables_to_extract[selector_match_regex]:
+                                    merged_extraction_infos = (tuple(variables_to_extract[selector_match_regex][property_name]) +
+                                                            tuple(extraction_infos))
+                                    variables_to_extract[selector_match_regex][property_name] = merged_extraction_infos
+                                else:
+                                    variables_to_extract[selector_match_regex][property_name] = extraction_infos
+                        else:
+                            variables_to_extract[selector_match_regex] = mapping
             finally:
                 sys.path = sys.path[2:]
         else:
             print('WARNING: Not extracting variables, use the --vars-module parameter to do so', file=sys.stderr)
-            variables_to_extract = {}
+
 
         for rule in css:
             if rule.type == rule.COMMENT:
@@ -511,8 +529,11 @@ def main():
     parser.add_argument('--output', help='Stylus output file (convert and merge mode)', metavar='FILENAME')
     parser.add_argument('--vars-output', help='Variables output file (convert mode only)', metavar='FILENAME')
     parser.add_argument('--vars-module',
+                        action='append',
+                        dest='vars_modules',
                         help='Python module with a dictionary called EXTRACT_VARIABLES defining which variables to '
-                        'extract(convert mode only, defaults to none)',
+                             'extract. Can be defined multiple times, rules are merged together. (convert mode only, '
+                             'defaults to none)',
                         metavar='MODULE NAME')
     parser.add_argument('--no-indented-style',
                         action="store_false",
@@ -531,13 +552,13 @@ def main():
         args.input = 'jquery.mobile.theme-1.1.0.css'
         args.output = 'jquery.mobile.theme-1.1.0.css.autogen.rules.styl'
         args.vars_output = 'jquery.mobile.theme-1.1.0.css.autogen.vars.styl'
-        args.vars_module = 'jqm_variables'
+        args.vars_modules = ['jqm_variables']
         args.mode = 'convert'
     elif args.mode == 'testsimple':
         args.input = 'test.css'
         args.output = 'test.css.autogen.rules.styl'
         args.vars_output = 'test.css.autogen.vars.styl'
-        args.vars_module = 'jqm_variables'
+        args.vars_modules = ['jqm_variables']
         args.mode = 'convert'
 
     if args.mode == 'unittest':
@@ -551,7 +572,7 @@ def main():
         Css2Stylus().convert(filename=args.input,
                              out_filename=args.output,
                              vars_out_filename=args.vars_output,
-                             vars_module=args.vars_module,
+                             vars_modules=args.vars_modules,
                              use_indented_style=not args.no_indented_style)
     elif args.mode == 'merge':
         if not args.input:
