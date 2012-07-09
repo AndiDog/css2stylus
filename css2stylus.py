@@ -79,7 +79,8 @@ class Css2Stylus(object):
             if name in extractVariablesMapping:
                 for searchRegex, variableName in extractVariablesMapping[name]:
                     # Match colors #fff, #123456, red, white, etc.
-                    searchRegex = searchRegex.replace('<COLOR>', r'(?P<color>#[a-fA-F0-9]{3,6}|[a-z]{3,20})')
+                    searchRegex = (searchRegex.replace('<COLOR>', r'(?P<color>#[a-fA-F0-9]{3,6}|[a-z]{3,20})')
+                                              .replace('<VALUE>', r'\s*(?P<value>.*)\s*'))
 
                     # Replace any inserted variables by underscores so that they won't get matched
                     match = re.search(searchRegex, self.replace_variable_ranges(value, value_variable_ranges))
@@ -87,8 +88,8 @@ class Css2Stylus(object):
                     if match:
                         variableValue = None
 
-                        for groupName in ('color',):
-                            if match.group(groupName):
+                        for groupName in ('color', 'value'):
+                            if match.groupdict().get(groupName, None):
                                 if variableValue is not None:
                                     raise AssertionError('Two groups in the regex matched!')
 
