@@ -201,7 +201,7 @@ class Css2Stylus(object):
                 out.append({'type' : 'comment',
                             'text' : rule.cssText})
             elif rule.type == rule.STYLE_RULE:
-                selector_list = tuple(selector.selectorText for selector in rule.selector_list)
+                selector_list = tuple(selector.selectorText for selector in rule.selectorList)
 
                 properties = []
                 out.append({'type' : 'style',
