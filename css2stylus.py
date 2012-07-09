@@ -110,6 +110,9 @@ class Css2Stylus(object):
 
                                 value_variable_ranges.append([start, start + len('$' + variableName)])
 
+                        if variableValue is None:
+                            raise AssertionError('Variable value of %s not found' % variableName)
+
                         if variableName in extractedVariables:
                             expectedVariableValue = extractedVariables[variableName][0]
 
